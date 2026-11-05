@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Animated Section FX
  * Description: Bloc Gutenberg conteneur (flex) avec image d'arrière-plan animée en WebGL (wave, ripple, displace). Sans build : aucun npm/node requis. Compatible WordPress 6.5+, testé 7.1 / 7.2-beta.
- * Version: 0.2.2
+ * Version: 0.2.3
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * License: GPL-2.0-or-later
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'ASFX_VERSION', '0.2.2' );
+define( 'ASFX_VERSION', '0.2.3' );
 define( 'ASFX_URL', plugin_dir_url( __FILE__ ) );
 
 /**
@@ -29,6 +29,7 @@ function asfx_init() {
                 'backgroundId'   => array( 'type' => 'number' ),
                 'backgroundUrl' => array( 'type' => 'string', 'default' => '' ),
                 'effect'         => array( 'type' => 'string', 'default' => 'wave' ),
+                'preset'         => array( 'type' => 'string', 'default' => 'standard' ),
                 'intensity'      => array( 'type' => 'number', 'default' => 50 ),
                 'speed'          => array( 'type' => 'number', 'default' => 50 ),
                 'minHeight'      => array( 'type' => 'number', 'default' => 400 ),
@@ -168,6 +169,7 @@ function asfx_sanitize_spacing_value( $value, $allow_auto = false ) {
 function asfx_render( $attributes, $content ) {
     $defaults = array(
         'effect'        => 'wave',
+        'preset'        => 'standard',
         'intensity'     => 50,
         'speed'         => 50,
         'minHeight'     => 400,
@@ -187,6 +189,10 @@ function asfx_render( $attributes, $content ) {
     $attrs = wp_parse_args( $attributes, $defaults );
 
     $effect    = sanitize_key( $attrs['effect'] );
+    $preset    = sanitize_key( $attrs['preset'] );
+    if ( ! in_array( $preset, array( 'soft', 'standard', 'strong' ), true ) ) {
+        $preset = 'standard';
+    }
     $intensity = max( 0, min( 100, (int) $attrs['intensity'] ) );
     $speed     = max( 0, min( 100, (int) $attrs['speed'] ) );
     $dim       = max( 0, min( 90, (int) $attrs['dim'] ) );
@@ -259,8 +265,9 @@ function asfx_render( $attributes, $content ) {
         )
     );
     $data = sprintf(
-        'data-asfx-effect="%s" data-asfx-intensity="%d" data-asfx-speed="%d" data-asfx-src="%s"',
+        'data-asfx-effect="%s" data-asfx-preset="%s" data-asfx-intensity="%d" data-asfx-speed="%d" data-asfx-src="%s"',
         esc_attr( $effect ),
+        esc_attr( $preset ),
         $intensity,
         $speed,
         esc_attr( $img_url )

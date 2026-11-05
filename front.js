@@ -25,6 +25,7 @@
         'uniform vec2 uRes;         // resolution canvas',
         'uniform vec2 uTexRes;      // resolution image',
         'uniform int uEffect;',
+        'uniform int uPreset;',
 
         'void main() {',
         '  vec2 uv = vUv;',
@@ -46,20 +47,27 @@
 
         '  if ( uEffect == 0 ) {',
         // wave : cisaillement sinusoïdal
-        '    uv.x += sin( uv.y * 12.0 + uTime * 2.0 ) * k;',
-        '    uv.y += cos( uv.x * 6.0 + uTime * 1.3 ) * k * 0.5;',
+        '    float waveFrequency = uPreset == 0 ? 8.0 : ( uPreset == 2 ? 18.0 : 12.0 );',
+        '    float waveAmplitude = uPreset == 0 ? 0.65 : ( uPreset == 2 ? 1.4 : 1.0 );',
+        '    uv.x += sin( uv.y * waveFrequency + uTime * 2.0 ) * k * waveAmplitude;',
+        '    uv.y += cos( uv.x * waveFrequency * 0.5 + uTime * 1.3 ) * k * waveAmplitude * 0.5;',
         '  } else if ( uEffect == 1 ) {',
         // ripple : ondes concentriques depuis le centre
         '    vec2 c = uv - 0.5;',
         '    float d = length( c );',
-        '    float r = sin( d * 30.0 - uTime * 3.0 ) * k * ( 1.0 - d );',
+        '    float rippleDensity = uPreset == 0 ? 20.0 : ( uPreset == 2 ? 45.0 : 30.0 );',
+        '    float rippleAmplitude = uPreset == 0 ? 0.65 : ( uPreset == 2 ? 1.35 : 1.0 );',
+        '    float r = sin( d * rippleDensity - uTime * 3.0 ) * k * rippleAmplitude * ( 1.0 - d );',
         '    uv += normalize( c + 0.0001 ) * r;',
         '  } else {',
         // displace : bruit organique multi-octaves (pseudo-Perlin par sommes de sin)
         '    float t = uTime * 0.8;',
-        '    float n1 = sin( uv.x * 8.0 + t ) * sin( uv.y * 8.0 + t * 1.7 );',
-        '    float n2 = sin( uv.x * 17.0 - t * 1.3 ) * sin( uv.y * 15.0 + t );',
-        '    uv += vec2( n1, n2 ) * k * 0.6;',
+        '    float noiseScale = uPreset == 0 ? 5.0 : ( uPreset == 2 ? 12.0 : 8.0 );',
+        '    float noiseDetail = uPreset == 0 ? 11.0 : ( uPreset == 2 ? 24.0 : 17.0 );',
+        '    float noiseAmplitude = uPreset == 0 ? 0.4 : ( uPreset == 2 ? 0.8 : 0.6 );',
+        '    float n1 = sin( uv.x * noiseScale + t ) * sin( uv.y * noiseScale + t * 1.7 );',
+        '    float n2 = sin( uv.x * noiseDetail - t * 1.3 ) * sin( uv.y * noiseDetail * 0.88 + t );',
+        '    uv += vec2( n1, n2 ) * k * noiseAmplitude;',
         '  }',
 
         '  vec4 col = texture2D( uTex, clamp( uv, 0.0, 1.0 ) );',
@@ -81,6 +89,7 @@
         var canvas = section.querySelector( '.asfx-canvas' );
         var src = section.getAttribute( 'data-asfx-src' );
         var effect = section.getAttribute( 'data-asfx-effect' );
+        var preset = section.getAttribute( 'data-asfx-preset' ) || 'standard';
         var intensity = parseInt( section.getAttribute( 'data-asfx-intensity' ), 10 ) / 100;
         var speed = parseInt( section.getAttribute( 'data-asfx-speed' ), 10 ) / 100;
         if ( ! canvas || ! src || effect === 'none' ) {
@@ -111,12 +120,18 @@
         var uRes = gl.getUniformLocation( prog, 'uRes' );
         var uTexRes = gl.getUniformLocation( prog, 'uTexRes' );
         var uEffect = gl.getUniformLocation( prog, 'uEffect' );
+        var uPreset = gl.getUniformLocation( prog, 'uPreset' );
 
         var effectId = { wave: 0, ripple: 1, displace: 2 }[ effect ];
         if ( effectId === undefined ) {
             effectId = 2;
         }
+        var presetId = { soft: 0, standard: 1, strong: 2 }[ preset ];
+        if ( presetId === undefined ) {
+            presetId = 1;
+        }
         gl.uniform1i( uEffect, effectId );
+        gl.uniform1i( uPreset, presetId );
         gl.uniform1f( uIntensity, intensity );
 
         var texture = gl.createTexture();

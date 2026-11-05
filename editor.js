@@ -29,6 +29,24 @@
         { value: 'none', label: __( 'Aucun (image statique)', 'animated-section-fx' ) },
     ];
 
+    var PRESETS = {
+        wave: [
+            { value: 'soft', label: __( 'Souple', 'animated-section-fx' ) },
+            { value: 'standard', label: __( 'Équilibrée', 'animated-section-fx' ) },
+            { value: 'strong', label: __( 'Ample', 'animated-section-fx' ) },
+        ],
+        ripple: [
+            { value: 'soft', label: __( 'Ondes espacées', 'animated-section-fx' ) },
+            { value: 'standard', label: __( 'Équilibrées', 'animated-section-fx' ) },
+            { value: 'strong', label: __( 'Ondes denses', 'animated-section-fx' ) },
+        ],
+        displace: [
+            { value: 'soft', label: __( 'Subtil', 'animated-section-fx' ) },
+            { value: 'standard', label: __( 'Équilibré', 'animated-section-fx' ) },
+            { value: 'strong', label: __( 'Détaillé', 'animated-section-fx' ) },
+        ],
+    };
+
     var WIDTH_UNITS = [
         { value: 'px', label: 'px' },
         { value: '%', label: '%' },
@@ -229,6 +247,14 @@
                         setAttributes( { effect: v } );
                     },
                 } ),
+                attributes.effect !== 'none' && el( SelectControl, {
+                    label: __( 'Style de déformation', 'animated-section-fx' ),
+                    value: attributes.preset || 'standard',
+                    options: PRESETS[ attributes.effect ] || PRESETS.wave,
+                    onChange: function ( v ) {
+                        setAttributes( { preset: v } );
+                    },
+                } ),
                 el( RangeControl, {
                     label: __( 'Intensité', 'animated-section-fx' ),
                     value: attributes.intensity,
@@ -368,6 +394,7 @@
             backgroundId: { type: 'number' },
             backgroundUrl: { type: 'string', default: '' },
             effect: { type: 'string', default: 'wave' },
+            preset: { type: 'string', default: 'standard' },
             intensity: { type: 'number', default: 50 },
             speed: { type: 'number', default: 50 },
             minHeight: { type: 'number', default: 400 },
