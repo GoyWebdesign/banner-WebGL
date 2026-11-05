@@ -2,7 +2,9 @@
 /**
  * Plugin Name: Animated Section FX
  * Description: Bloc Gutenberg conteneur (flex) avec image d'arrière-plan animée en WebGL (wave, ripple, displace). Sans build : aucun npm/node requis. Compatible WordPress 6.5+, testé 7.1 / 7.2-beta.
- * Version: 0.2.3
+ * Version: 0.2.4
+ * Plugin URI: https://github.com/GoyWebdesign/banner-WebGL
+ * Update URI: https://github.com/GoyWebdesign/banner-WebGL
  * Requires at least: 6.5
  * Requires PHP: 7.4
  * License: GPL-2.0-or-later
@@ -13,8 +15,202 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'ASFX_VERSION', '0.2.3' );
+define( 'ASFX_VERSION', '0.2.4' );
 define( 'ASFX_URL', plugin_dir_url( __FILE__ ) );
+define( 'ASFX_GITHUB_REPO', 'https://github.com/GoyWebdesign/banner-WebGL' );
+define( 'ASFX_GITHUB_API', 'https://api.github.com/repos/GoyWebdesign/banner-WebGL/releases/latest' );
+
+/**
+ * Récupère la dernière release stable publiée sur GitHub.
+ *
+ * @return array|WP_Error Données de release ou erreur HTTP/JSON.
+ */
+function asfx_get_github_release() {
+    $cached = get_transient( 'asfx_github_release' );
+    if ( false !== $cached ) {
+        return $cached;
+    }
+
+    $cached_error = get_transient( 'asfx_github_update_error' );
+    if ( false !== $cached_error ) {
+        return new WP_Error( 'asfx_github_cached_error', $cached_error );
+    }
+
+    $response = wp_remote_get(
+        ASFX_GITHUB_API,
+        array(
+            'timeout' => 10,
+            'headers' => array(
+                'Accept'     => 'application/vnd.github+json',
+                'User-Agent' => 'Animated-Section-FX/' . ASFX_VERSION . '; ' . home_url( '/' ),
+            ),
+        )
+    );
+
+    if ( is_wp_error( $response ) ) {
+        set_transient( 'asfx_github_update_error', $response->get_error_message(), HOUR_IN_SECONDS );
+        return $response;
+    }
+
+    $status = wp_remote_retrieve_response_code( $response );
+    if ( 200 !== $status ) {
+        $message = 404 === $status
+            ? 'Dépôt ou release stable GitHub introuvable. Vérifiez que le dépôt est public et qu’une release est publiée.'
+            : sprintf( 'GitHub a répondu avec le code HTTP %d.', $status );
+        set_transient( 'asfx_github_update_error', $message, HOUR_IN_SECONDS );
+        return new WP_Error( 'asfx_github_http_error', $message );
+    }
+
+    $release = json_decode( wp_remote_retrieve_body( $response ), true );
+    if (
+        ! is_array( $release )
+        || empty( $release['tag_name'] )
+        || empty( $release['zipball_url'] )
+        || ! empty( $release['draft'] )
+        || ! empty( $release['prerelease'] )
+    ) {
+        $message = 'La réponse GitHub ne contient pas de release stable exploitable.';
+        set_transient( 'asfx_github_update_error', $message, HOUR_IN_SECONDS );
+        return new WP_Error( 'asfx_github_invalid_release', $message );
+    }
+
+    $version = preg_replace( '/^v/i', '', sanitize_text_field( $release['tag_name'] ) );
+    if ( ! preg_match( '/^\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/', $version ) ) {
+        $message = 'Le tag de release GitHub ne contient pas une version valide.';
+        set_transient( 'asfx_github_update_error', $message, HOUR_IN_SECONDS );
+        return new WP_Error( 'asfx_github_invalid_version', $message );
+    }
+
+    $data = array(
+        'version'     => $version,
+        'package'     => esc_url_raw( $release['zipball_url'] ),
+        'url'         => esc_url_raw( isset( $release['html_url'] ) ? $release['html_url'] : ASFX_GITHUB_REPO . '/releases' ),
+        'description' => isset( $release['body'] ) ? sanitize_textarea_field( $release['body'] ) : '',
+        'published'   => isset( $release['published_at'] ) ? sanitize_text_field( $release['published_at'] ) : '',
+    );
+
+    delete_transient( 'asfx_github_update_error' );
+    set_transient( 'asfx_github_release', $data, 6 * HOUR_IN_SECONDS );
+    return $data;
+}
+
+/**
+ * Signale sur la page des extensions si GitHub ne permet pas de vérifier les releases.
+ */
+function asfx_github_update_admin_notice() {
+    if ( ! current_user_can( 'update_plugins' ) || ! function_exists( 'get_current_screen' ) ) {
+        return;
+    }
+
+    $screen = get_current_screen();
+    $error = get_transient( 'asfx_github_update_error' );
+    if ( ! $screen || 'plugins' !== $screen->id || false === $error ) {
+        return;
+    }
+
+    printf(
+        '<div class="notice notice-warning"><p>%s</p></div>',
+        esc_html( 'Animated Section FX : mise à jour GitHub non vérifiée. ' . $error )
+    );
+}
+add_action( 'admin_notices', 'asfx_github_update_admin_notice' );
+
+/**
+ * Ajoute la release GitHub aux mises à jour proposées par WordPress.
+ *
+ * @param object $transient Transient des mises à jour de plugins.
+ * @return object
+ */
+function asfx_check_for_plugin_update( $transient ) {
+    if ( ! is_object( $transient ) || empty( $transient->checked ) ) {
+        return $transient;
+    }
+
+    $release = asfx_get_github_release();
+    if ( is_wp_error( $release ) ) {
+        return $transient;
+    }
+
+    $plugin_file = plugin_basename( __FILE__ );
+    if ( ! isset( $transient->response ) || ! is_object( $transient->response ) ) {
+        $transient->response = new stdClass();
+    }
+    if ( ! isset( $transient->no_update ) || ! is_object( $transient->no_update ) ) {
+        $transient->no_update = new stdClass();
+    }
+
+    if ( version_compare( $release['version'], ASFX_VERSION, '>' ) ) {
+        $transient->response[ $plugin_file ] = (object) array(
+            'slug'        => dirname( $plugin_file ),
+            'plugin'      => $plugin_file,
+            'new_version' => $release['version'],
+            'url'         => $release['url'],
+            'package'     => $release['package'],
+        );
+    } else {
+        $transient->no_update[ $plugin_file ] = (object) array(
+            'slug'        => dirname( $plugin_file ),
+            'plugin'      => $plugin_file,
+            'new_version' => ASFX_VERSION,
+            'url'         => ASFX_GITHUB_REPO,
+            'package'     => '',
+        );
+    }
+
+    return $transient;
+}
+add_filter( 'pre_set_site_transient_update_plugins', 'asfx_check_for_plugin_update' );
+
+/**
+ * Affiche les informations GitHub dans la fenêtre « Détails du plugin ».
+ *
+ * @param false|object|WP_Error $result Résultat courant.
+ * @param string                $action Action demandée par WordPress.
+ * @param object                $args   Paramètres de la requête.
+ * @return false|object|WP_Error
+ */
+function asfx_plugin_information( $result, $action, $args ) {
+    if ( 'plugin_information' !== $action || empty( $args->slug ) || dirname( plugin_basename( __FILE__ ) ) !== $args->slug ) {
+        return $result;
+    }
+
+    $release = asfx_get_github_release();
+    if ( is_wp_error( $release ) ) {
+        return $result;
+    }
+
+    return (object) array(
+        'name'          => 'Animated Section FX',
+        'slug'          => dirname( plugin_basename( __FILE__ ) ),
+        'version'       => $release['version'],
+        'author'        => '<a href="' . esc_url( ASFX_GITHUB_REPO ) . '">GoyWebdesign</a>',
+        'homepage'      => ASFX_GITHUB_REPO,
+        'download_link' => $release['package'],
+        'sections'      => array(
+            'description' => 'Bloc Gutenberg conteneur avec image d’arrière-plan animée en WebGL.',
+            'changelog'   => $release['description'] ? nl2br( esc_html( $release['description'] ) ) : 'Voir les notes de version sur GitHub.',
+        ),
+        'last_updated'  => $release['published'],
+        'requires'      => '6.5',
+        'requires_php'  => '7.4',
+    );
+}
+add_filter( 'plugins_api', 'asfx_plugin_information', 10, 3 );
+
+/**
+ * Ajoute un lien direct vers le dépôt dans la liste des extensions.
+ *
+ * @param array  $links      Liens de métadonnées existants.
+ * @param string $plugin_file Fichier du plugin.
+ * @return array
+ */
+function asfx_plugin_row_meta( $links, $plugin_file ) {
+    if ( plugin_basename( __FILE__ ) === $plugin_file ) {
+        $links[] = '<a href="' . esc_url( ASFX_GITHUB_REPO ) . '">Dépôt GitHub</a>';
+    }
+    return $links;
+}
+add_filter( 'plugin_row_meta', 'asfx_plugin_row_meta', 10, 2 );
 
 /**
  * Enregistre le bloc côté serveur et les assets front.
