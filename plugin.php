@@ -132,11 +132,11 @@ function asfx_check_for_plugin_update( $transient ) {
     }
 
     $plugin_file = plugin_basename( __FILE__ );
-    if ( ! isset( $transient->response ) || ! is_object( $transient->response ) ) {
-        $transient->response = new stdClass();
+    if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+        $transient->response = array();
     }
-    if ( ! isset( $transient->no_update ) || ! is_object( $transient->no_update ) ) {
-        $transient->no_update = new stdClass();
+    if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+        $transient->no_update = array();
     }
 
     if ( version_compare( $release['version'], ASFX_VERSION, '>' ) ) {
